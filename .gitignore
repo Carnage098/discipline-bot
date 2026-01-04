@@ -1,0 +1,5 @@
+.env
+discipline.db
+__pycache__/
+*.pyc
+.venv/
