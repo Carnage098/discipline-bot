@@ -477,9 +477,6 @@ async def on_ready():
         print("❌ ERREUR SYNC SLASH COMMANDS :", repr(e))
 
     print("✅ Bot prêt.")
-    
-    if not TOKEN:
-    raise RuntimeError("DISCORD_TOKEN manquant. Mets-le en variable d'environnement.")
 
 try:
     print("✅ Lancement du bot...", flush=True)
@@ -487,4 +484,4 @@ try:
 except Exception as e:
     print("❌ Crash au lancement :", repr(e), flush=True)
     raise
-
+bot.run(TOKEN)
