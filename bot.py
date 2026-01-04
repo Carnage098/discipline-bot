@@ -448,17 +448,27 @@ async def on_ready():
         await ensure_settings(g.id)
         await set_role_ids_from_names(g)
 
-    # Sync commandes (rapide si GUILD_ID fourni)
-    if GUILD_ID:
-        guild = discord.Object(id=GUILD_ID)
-        bot.tree.copy_global_to(guild=guild)
-        await bot.tree.sync(guild=guild)
-    else:
-        await bot.tree.sync()
+    print("========== DEBUG DISCORD ==========")
+    print("Bot :", bot.user)
+    print("Guilds (noms) :", [g.name for g in bot.guilds])
+    print("Guilds (ids)  :", [g.id for g in bot.guilds])
+    print("GUILD_ID env  :", GUILD_ID)
+    print("==================================")
 
-    print(f"Connecté en tant que {bot.user}.")
+    try:
+        if GUILD_ID:
+            guild = discord.Object(id=GUILD_ID)
+            bot.tree.copy_global_to(guild=guild)
+            synced = await bot.tree.sync(guild=guild)
+        else:
+            synced = await bot.tree.sync()
 
-if not TOKEN:
-    raise RuntimeError("DISCORD_TOKEN manquant. Mets-le en variable d'environnement.")
+        print(f"✅ Slash commands synchronisées : {len(synced)}")
+        # Souvent la liste ne montre que 'disc' car c'est un Group
+        for cmd in synced:
+            print(" -", cmd.name)
 
-bot.run(TOKEN)
+    except Exception as e:
+        print("❌ ERREUR SYNC SLASH COMMANDS :", repr(e))
+
+    print("✅ Bot prêt.")
