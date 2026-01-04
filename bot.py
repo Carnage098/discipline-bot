@@ -7,6 +7,11 @@ from discord import app_commands
 from discord.ext import commands
 from dotenv import load_dotenv
 
+import sys
+print("✅ bot.py démarre", flush=True)
+sys.stdout.reconfigure(line_buffering=True)
+sys.stderr.reconfigure(line_buffering=True)
+
 load_dotenv()
 
 TOKEN = os.getenv("DISCORD_TOKEN")
@@ -472,3 +477,14 @@ async def on_ready():
         print("❌ ERREUR SYNC SLASH COMMANDS :", repr(e))
 
     print("✅ Bot prêt.")
+    
+    if not TOKEN:
+    raise RuntimeError("DISCORD_TOKEN manquant. Mets-le en variable d'environnement.")
+
+try:
+    print("✅ Lancement du bot...", flush=True)
+    bot.run(TOKEN)
+except Exception as e:
+    print("❌ Crash au lancement :", repr(e), flush=True)
+    raise
+
