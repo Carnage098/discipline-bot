@@ -1,4 +1,3 @@
-```py
 import os
 import io
 import datetime
@@ -537,4 +536,3 @@ if __name__ == "__main__":
     except Exception as e:
         print("❌ Crash au lancement :", repr(e), flush=True)
         raise
-```
