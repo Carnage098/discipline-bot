@@ -1,3 +1,4 @@
+```py
 import os
 import io
 import datetime
@@ -249,21 +250,54 @@ async def get_leaderboard(guild_id: int, season_id: int, limit: int = 10):
         )
         return await cur.fetchall()
 
+# ===== STAFF / ADMIN CHECKS =====
+
 def is_staff(interaction: discord.Interaction, settings: dict) -> bool:
-    if not interaction.user or not isinstance(interaction.user, discord.Member):
+    # Refuse hors serveur (DM)
+    if interaction.guild is None:
         return False
-    member: discord.Member = interaction.user
-    if settings.get("staff_role_id"):
-        return any(r.id == settings["staff_role_id"] for r in member.roles)
-    return member.guild_permissions.manage_guild
+
+    member = interaction.user
+    if not isinstance(member, discord.Member):
+        return False
+
+    # Si un rôle staff est configuré en DB, il fait foi
+    staff_role_id = settings.get("staff_role_id")
+    if staff_role_id:
+        return any(r.id == staff_role_id for r in member.roles)
+
+    # Fallback : permission ADMIN
+    return member.guild_permissions.administrator
 
 def require_staff():
     async def predicate(interaction: discord.Interaction):
+        if interaction.guild_id is None:
+            raise app_commands.CheckFailure("Commande utilisable uniquement sur un serveur.")
+
         settings = await get_settings(interaction.guild_id)
         if is_staff(interaction, settings):
             return True
-        raise app_commands.CheckFailure("Tu n'as pas la permission d'utiliser cette commande.")
+
+        raise app_commands.CheckFailure("❌ Tu n'as pas la permission d'utiliser cette commande.")
     return app_commands.check(predicate)
+
+# Handler global : affiche un message propre quand un check échoue
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CheckFailure):
+        msg = str(error) if str(error) else "❌ Permission refusée."
+        if interaction.response.is_done():
+            return await interaction.followup.send(msg, ephemeral=True)
+        return await interaction.response.send_message(msg, ephemeral=True)
+
+    print("❌ AppCommandError:", repr(error))
+    try:
+        if interaction.response.is_done():
+            await interaction.followup.send("⚠️ Une erreur est survenue.", ephemeral=True)
+        else:
+            await interaction.response.send_message("⚠️ Une erreur est survenue.", ephemeral=True)
+    except:
+        pass
 
 async def apply_auto_sanctions(guild: discord.Guild, member: discord.Member, points: int):
     settings = await get_settings(guild.id)
@@ -297,6 +331,19 @@ class Discipline(app_commands.Group):
     async def season_reset(self, interaction: discord.Interaction, name: str):
         season_id, season_name = await start_new_season(interaction.guild_id, name)
         await interaction.response.send_message(f"✅ Nouvelle saison : **{season_name}** (ID: {season_id}).")
+
+    @app_commands.command(name="set_staff_role", description="Définit le rôle staff autorisé (admin uniquement).")
+    @app_commands.describe(role="Rôle qui pourra utiliser les commandes staff")
+    async def set_staff_role(self, interaction: discord.Interaction, role: discord.Role):
+        # On force ADMIN Discord pour définir le staff_role_id (plus safe)
+        if interaction.guild is None or not isinstance(interaction.user, discord.Member) or not interaction.user.guild_permissions.administrator:
+            return await interaction.response.send_message("❌ Admin uniquement.", ephemeral=True)
+
+        async with aiosqlite.connect(DB_PATH) as db:
+            await db.execute("UPDATE settings SET staff_role_id=? WHERE guild_id=?", (role.id, interaction.guild_id))
+            await db.commit()
+
+        await interaction.response.send_message(f"✅ Rôle staff défini : {role.mention}", ephemeral=True)
 
     @app_commands.command(name="penalize", description="Sanction (-1 à -3) + type.")
     @require_staff()
@@ -365,6 +412,9 @@ class Discipline(app_commands.Group):
     @app_commands.command(name="history", description="Historique COMPLET (saison active).")
     @app_commands.describe(user="Joueur")
     async def history(self, interaction: discord.Interaction, user: discord.Member):
+        if interaction.guild_id is None:
+            return await interaction.response.send_message("Commande utilisable uniquement sur un serveur.", ephemeral=True)
+
         settings = await get_settings(interaction.guild_id)
         if settings["history_locked"] and not is_staff(interaction, settings):
             return await interaction.response.send_message("🔒 Historique verrouillé (staff).", ephemeral=True)
@@ -393,6 +443,9 @@ class Discipline(app_commands.Group):
 
     @app_commands.command(name="stats", description="Stats sanctions par type (staff).")
     async def stats(self, interaction: discord.Interaction, user: discord.Member):
+        if interaction.guild_id is None:
+            return await interaction.response.send_message("Commande utilisable uniquement sur un serveur.", ephemeral=True)
+
         settings = await get_settings(interaction.guild_id)
         if not is_staff(interaction, settings):
             return await interaction.response.send_message("🔒 Stats verrouillées (staff).", ephemeral=True)
@@ -469,7 +522,6 @@ async def on_ready():
             synced = await bot.tree.sync()
 
         print(f"✅ Slash commands synchronisées : {len(synced)}")
-        # Souvent la liste ne montre que 'disc' car c'est un Group
         for cmd in synced:
             print(" -", cmd.name)
 
@@ -478,10 +530,11 @@ async def on_ready():
 
     print("✅ Bot prêt.")
 
-try:
-    print("✅ Lancement du bot...", flush=True)
-    bot.run(TOKEN)
-except Exception as e:
-    print("❌ Crash au lancement :", repr(e), flush=True)
-    raise
-bot.run(TOKEN)
+if __name__ == "__main__":
+    try:
+        print("✅ Lancement du bot...", flush=True)
+        bot.run(TOKEN)
+    except Exception as e:
+        print("❌ Crash au lancement :", repr(e), flush=True)
+        raise
+```
